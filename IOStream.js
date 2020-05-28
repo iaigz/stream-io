@@ -15,9 +15,10 @@ module.exports = class IOStream extends Duplex {
     assert(typeof opts === 'object', 'options (argument 3) must be an object')
 
     opts = {
-      // lazy instructs IO to wait until receiving data to spawn subprocess
+      // $lazy instructs IO to wait until receiving data to spawn subprocess
       // set this value to false to spawn subprocess on instance creation
-      lazy: true, // YAGNI & KISS ....
+      lazy: true, // YAGNI
+      // TODO errput: writable destination for child's stderr
       ...opts
     }
 
@@ -33,7 +34,7 @@ module.exports = class IOStream extends Duplex {
     this[CP] = opts.lazy ? null : this.spawn()
   }
 
-  // The spawn logic could be inside _write while 'lazy' option is useless
+  // The spawn logic could be inside _write while 'lazy' option is useless BUT
   // Spawn logic decouple seems leaner for deploying subprocess event listeners
   spawn () {
     return spawn(this[IO].cmd, this[IO].argv, {
@@ -63,12 +64,12 @@ module.exports = class IOStream extends Duplex {
           }
           this.emit('error', error)
         } else {
-          console.log(`Child has exit gracefully (code ${code})`)
+          console.error(`Child has exit gracefully (code ${code})`)
         }
       })
       // "close" only emits after stdio streams close
       .on('close', (code, signal) => {
-        console.log('Child closed stdio streams')
+        console.error('Child closed stdio streams')
         this.push(null)
       })
   }
@@ -83,9 +84,10 @@ module.exports = class IOStream extends Duplex {
       return callback(new Error('Child stdin is not writable'))
     }
 
-    // #write() to Child process' stdin, but honor back-presure
-    // #write() returns false when should wait "drain" to finish operation
-    // non-false return value instructs us to finish operation and continue
+    // #write() each received chunk to Child process' stdin
+    // Respect back-presure as instructed by #write()'s return value:
+    // - **false** means: wait "drain" to finish operation
+    // - **non-false** means: finish operation and continue
     if (this[CP].stdin.write(chunk, encoding) === false) {
       console.error('waiting drain event to finish write')
       return this[CP].stdin.once('drain', callback)
@@ -110,23 +112,23 @@ module.exports = class IOStream extends Duplex {
       this[CP].stdout
         .on('data', chunk => {
           // TODO YAGNI+KISS!! could duplicate output elsewhere like tee
-          // console.error('out: %s', chunk)
+          process.stderr.write(`out: ${chunk.toString('utf8')}`)
 
           // Push each pulled chunk into the internal buffer
-          // Honor back-pressure after pushing data:
+          // Respect back-pressure after pushing data:
           // If push() returns false, then stop reading from source.
           if (this.push(chunk) === false) {
-            console.log('Child stdout paused')
+            console.error('Child stdout paused')
             this[CP].stdout.pause()
           }
         })
         .on('end', () => {
-          console.log('Child stdout has end!!')
-          // When the source ends, push the EOF-signaling `null` chunk.
+          console.error('Child stdout has end!!')
+          // Pushing `null` chunk signals EOF, when source end
           // this.push(null);
         })
     } else {
-      console.log('stdout.readableFlowing:', this[CP].stdout.readableFlowing)
+      console.error('stdout.readableFlowing:', this[CP].stdout.readableFlowing)
     }
   }
 }
