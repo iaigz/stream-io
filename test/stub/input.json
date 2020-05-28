@@ -1,0 +1,14 @@
+{
+  "campo": "valor",
+  "boolean": false,
+  "nulo": null,
+  "array_numbers": [1, 2, 3],
+  "array_remix": [1, "foo", { "bar": "baz" }, null, true, false, "nulL"],
+  "objeto": {
+    "opcion": true,
+    "numero": 0,
+    "array": [1, 2, 3],
+    "string": "hello world"
+  },
+  "objeto_vacio": {}
+}
