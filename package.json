@@ -1,0 +1,32 @@
+{
+  "name": "@iaigz/stream-io",
+  "version": "1.0.0",
+  "description": "Pipeable spawned processes",
+  "main": "IOStream.js",
+  "files": [
+    "IOStream.js"
+  ],
+  "scripts": {
+    "test": "./script/test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iaigz/stream-io.git"
+  },
+  "keywords": [
+    "iai",
+    "core",
+    "stream",
+    "io",
+    "child_process",
+    "spawn",
+    "duplex",
+    "stream"
+  ],
+  "author": "Lorenzo García Rivera",
+  "license": "CC-BY-SA-4.0",
+  "bugs": {
+    "url": "https://github.com/iaigz/stream-io/issues"
+  },
+  "homepage": "https://github.com/iaigz/stream-io#readme"
+}
