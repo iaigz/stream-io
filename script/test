@@ -5,6 +5,8 @@ cd "$repo" || exit
 
 node test/exports.js || exit
 
+node test/cat.js || exit
+
 {
   echo "TEST standard --fix"
   standard --fix

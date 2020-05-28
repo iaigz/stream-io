@@ -1,11 +1,11 @@
-console.log('TEST node', __filename)
+console.log('TEST', process.argv.join(' '))
 
 process.on('exit', code => { console.log('CODE', code) })
 
-// $seq is the sequence of data which will be written to IOStream during tests
+// $seq is the sequence of data which will be written to stream during tests
 // $idx holds a pointer to current $seq index to be tested
-// $idx also counts how many 'data' events emits the IOStream
-// $end is used to trap whenever IOStream emits the 'end' event
+// $idx also counts how many 'data' events emits the stream
+// $end is used to trap whenever stream emits the 'end' event
 const seq = [
   'some words flow down the pipe\n',
   'lets test if it is passing data through\n',
@@ -17,19 +17,9 @@ let idx = 0
 let end = false
 let finish = false
 
-// test timeout mechanics
-// $timeLimit is max miliseconds until force exit (and fail with code 124)
-// $timeout must be cleared to allow node process to exit gracefully
-const timeLimit = 3 * 1000
-const timeout = setTimeout(() => {
-  console.log(`FAIL test took more than ${timeLimit / 1000} seconds.`)
-  console.log('INFO will force process.exit')
-  process.exit(124)
-}, timeLimit)
-
 process.on('beforeExit', () => {
   if (idx === seq.length) {
-    console.log('PASS IOStream stream "data" event was emitted %s times', idx)
+    console.log('PASS stream "data" event was emitted %s times', idx)
   } else {
     console.error('idx (times emitted):', idx)
     console.log('FAIL "data" should have been emmited %s times', seq.length)
@@ -45,14 +35,14 @@ process.on('beforeExit', () => {
   }
 })
 
-const IOStream = require('..')
+const StreamBuilder = require('..')
 
-const io = new IOStream('cat')
+const stream = new StreamBuilder('cat')
 
-io
+stream
   .on('error', err => {
     console.error(err)
-    console.log('FAIL IOStream should not emit "error" event during test')
+    console.log('FAIL stream should not emit "error" event during test')
     process.exitCode = 1
   })
   // The IO is consumed (starts flowing) via 'data' event interface
@@ -83,28 +73,50 @@ io
 
     if (++idx === seq.length) {
       console.log('INFO test data sequence end reached')
-      io.end() // emulate input end when seq has finish
+      stream.end() // emulate input (writable side) end when seq has finish
     } else {
-      io.write(Buffer.from(seq[idx]))
+      console.log('HEAD data sequence value %s: %j', idx, seq[idx])
+      stream.write(Buffer.from(seq[idx]))
       process.exitCode = 1
     }
   })
   .on('finish', () => {
-    console.log('PASS IOStream emits "finish"')
+    console.log('PASS stream emits "finish"')
     finish = true
   })
   .on('end', () => {
-    console.log('PASS IOStream emits "end"')
+    console.log('PASS stream emits "end"')
     end = true
-    if (finish) {
-      clearTimeout(timeout)
-      process.exitCode = 0
-    }
   })
 
-// begin test writing the first value from data sequence to the IOStream
+// test timeout mechanics
+// $timeLimit is max miliseconds until force exit (and fail with code 124)
+// $timeout must be cleared to allow node process to exit gracefully
+const timeLimit = 3 * 1000
+const timeout = setTimeout(() => {
+  console.log(`FAIL test took more than ${timeLimit / 1000} seconds.`)
+  console.log('INFO will force process.exit')
+  process.exit(124)
+}, timeLimit)
+
+const { finished } = require('stream')
+
+finished(stream, err => {
+  clearTimeout(timeout)
+  if (err) {
+    console.error(err)
+    console.log('FAIL stream failed')
+    process.exitCode = 1
+    return stream.destroy()
+  }
+  console.log('INFO stream has succesfully finished')
+  process.exitCode = 0
+})
+
+// begin test writing the first value from data sequence to the stream
 try {
-  io.write(Buffer.from(seq[idx]))
+  console.log('INFO test data sequence begins, %s elements to go', seq.length)
+  stream.write(Buffer.from(seq[idx]))
 } catch (err) {
   console.error(err)
   console.log('FAIL writing to the stream should not throw')
