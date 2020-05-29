@@ -37,6 +37,7 @@ module.exports = class IOStream extends Duplex {
   // The spawn logic could be inside _write while 'lazy' option is useless BUT
   // Spawn logic decouple seems leaner for deploying subprocess event listeners
   spawn () {
+    console.error('spawn', this[IO])
     return spawn(this[IO].cmd, this[IO].argv, {
       stdio: ['pipe', 'pipe', process.stderr]
     })
@@ -76,9 +77,8 @@ module.exports = class IOStream extends Duplex {
 
   // The writable interface follows received data to Subprocess' stdin
   _write (chunk, encoding, callback) {
-    if (this[CP] === null) {
-      this[CP] = this.spawn()
-    }
+    // lazily spawn subprocess if need
+    if (this[CP] === null) this[CP] = this.spawn()
 
     if (!this[CP].stdin.writable) {
       return callback(new Error('Child stdin is not writable'))
@@ -102,6 +102,9 @@ module.exports = class IOStream extends Duplex {
 
   // The readable interface pushes data pulled from Subprocess' stdout
   _read (size) {
+    // lazily spawn subprocess if need
+    if (this[CP] === null) this[CP] = this.spawn()
+
     // remember: errors while reading must propagate through #destroy()
     if (!this[CP].stdout.readable) {
       return this.destroy(new Error('Child stdout is not readable'))
