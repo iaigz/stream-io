@@ -3,7 +3,7 @@ const test = require('./_test-stream')
 const IO = require('..')
 
 // prepare data sequence to be written to subject stream
-const seq = new Array(100000).fill('anything')
+const seq = new Array(10000).fill('anything')
 
 // checks to perform after test.duplex fulfills
 const infoTester = (test) => function (info) {
@@ -26,6 +26,18 @@ const infoTester = (test) => function (info) {
     return test.end(new Error('stream should emit "finish" and "end"'))
   }
 
+  if (info.writeOverflows > 0) {
+    console.log(`PASS stream was write-pressed ${info.writeOverflows} times`)
+  } else {
+    return test.end(new Error('stream should receive write pressure'))
+  }
+
+  if (info.emits.drain) {
+    console.log('PASS stream has emitted "drain" event')
+  } else {
+    return test.end(new Error('stream should emit "drain" event'))
+  }
+
   return test
 }
 
@@ -34,7 +46,13 @@ test
   .then(test => {
     const stream = new IO('cat')
     return test
-      .duplex(stream, { seq, step: false, through: false })
+      .duplex(stream, { seq, step: false, emits: ['drain'] })
+      .then(infoTester(test))
+  })
+  .then(test => {
+    const stream = new IO('cat')
+    return test
+      .duplex(stream, { seq, step: false, emits: ['drain'], sync: true })
       .then(infoTester(test))
   })
   .catch(test.catcher)

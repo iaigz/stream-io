@@ -13,16 +13,6 @@ const seq = [
 
 // checks to perform after test.duplex fulfills
 const infoTester = (test) => function (info) {
-  const actual = info.dataCount
-  const expect = info.seq.length
-  if (actual === expect) {
-    console.log('PASS stream emitted %s "data" event(s)', actual)
-  } else {
-    console.error('times emitted:', actual)
-    console.error('expected emits:', expect)
-    return test.end(new Error('"data" event emits count mismatch'))
-  }
-
   if (!info.emits.error) {
     console.log('PASS stream has not emitted "error" event')
   } else {
@@ -43,23 +33,14 @@ test
   .then(test => {
     const stream = new IO('cat')
     return test
-      .duplex(stream, { seq })
+      .duplex(stream, { seq, through: true })
       .then(infoTester(test))
   })
   .then(test => {
     const stream = new IO('cat')
     return test
-      .duplex(stream, { seq, sync: true })
+      .duplex(stream, { seq, through: true, sync: true })
       .then(infoTester(test))
-  })
-  .then(test => {
-    const stream = new IO('cat')
-    return test
-      .duplex(stream, { seq, step: false, through: false })
-      .then(info => {
-        console.error(info)
-        return test
-      })
   })
   .catch(test.catcher)
   .finally(test.teardown)
