@@ -1,6 +1,6 @@
 #!/bin/bash
 
-repo="$(iai repo)" || exit
+repo="$(git rev-parse --show-toplevel)" || exit
 cd "$repo" || exit
 
 node test/exports.js || exit
