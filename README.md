@@ -11,43 +11,7 @@ Internally, it wraps a Subprocess whoose standard input can be reached
 through the _Writable_ stream interface; and whoose standard output can be
 consumed from the _Readable_ stream counterpart.
 
-- - -
-
-Time have elapsed since I messed-up with the Duplex aproach. At that
-time I thought IO may perform operations with data which aren't a
-transform - in the sense of _transformation_ - but some day I found the
-following wonderful piece of knowledge at SO.
-
-## Difference between Transform and Duplex
-
-> taken from https://stackoverflow.com/a/18339203/1894803
-
-A Duplex stream can be thought of a readable stream with a writable stream.
-Both are independent and each have separate internal buffer.
-The reads and writes events happen independently.
-
-### Duplex Stream
-                       ------------------|
-                 Read  <-----               External Source
-         You           ------------------|
-                 Write ----->               External Sink
-                       ------------------|
-         You don't get what you write. It is sent to another source.
-
-A Transform stream is a duplex where the read and write takes place in a
-causal way. The end points of the duplex stream are linked via some
-transform. Read requires write to have occurred.
-
-### Transform Stream
-                        --------------|--------------
-         You     Write  ---->                   ---->  Read  You
-                        --------------|--------------
-         You write something, it is transformed, then you read something.
-- - -
-
-The EUREKA there is the linear flow _input => output_ which a Transform
-stream eases significantly, whereas Duplex feels a kind of bi-directional
-beast.
+[[_TOC_]]
 
 ## Install
 
@@ -89,3 +53,41 @@ bash script/lint
 ```
 
 Linting is done with `standard`, so code style meets `standard` style.
+
+- - -
+
+Time have elapsed since I messed-up with the Duplex aproach. At that
+time I thought IO may perform operations with data which aren't a
+transform - in the sense of _transformation_ - but some day I found the
+following wonderful piece of knowledge at SO.
+
+## Difference between Transform and Duplex
+
+> taken from https://stackoverflow.com/a/18339203/1894803
+
+A Duplex stream can be thought of a readable stream with a writable stream.
+Both are independent and each have separate internal buffer.
+The reads and writes events happen independently.
+
+### Duplex Stream
+                       ------------------|
+                 Read  <-----               External Source
+         You           ------------------|
+                 Write ----->               External Sink
+                       ------------------|
+         You don't get what you write. It is sent to another source.
+
+A Transform stream is a duplex where the read and write takes place in a
+causal way. The end points of the duplex stream are linked via some
+transform. Read requires write to have occurred.
+
+### Transform Stream
+                        --------------|--------------
+         You     Write  ---->                   ---->  Read  You
+                        --------------|--------------
+         You write something, it is transformed, then you read something.
+- - -
+
+The EUREKA there is the linear flow _input => output_ which a Transform
+stream eases significantly, whereas Duplex feels a kind of bi-directional
+beast.
