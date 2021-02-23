@@ -29,5 +29,8 @@
   "bugs": {
     "url": "https://github.com/iaigz/stream-io/issues"
   },
-  "homepage": "https://github.com/iaigz/stream-io#readme"
+  "homepage": "https://github.com/iaigz/stream-io#readme",
+  "devDependencies": {
+    "standard": "^16.0.3"
+  }
 }

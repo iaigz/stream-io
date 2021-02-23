@@ -157,18 +157,21 @@ module.exports = class IOStream extends Transform {
     if (!this._io.opts.debug) return
 
     const { cp } = this._io
-    console.error(`${this} ${message}`, info ? {
-      // inputPending: cp.stdin.pending,
-      // inputConnecting: cp.stdin.connecting,
-      inputWritable: cp.stdin.writable,
-      inputWritableEnded: cp.stdin.writableEnded,
-      inputWritableLength: cp.stdin.writableLength,
-      inputWritableFinished: cp.stdin.writableFinished,
-      outputReadableEnded: cp.stdout.readableEnded,
-      outputReadableLength: cp.stdout.readableLength,
-      outputReadableFlowing: cp.stdout.readableFlowing,
-      outputReadableisPaused: cp.stdout.isPaused()
-    } : '')
+    console.error(`${this} ${message}`, info
+      ? {
+          // inputPending: cp.stdin.pending,
+          // inputConnecting: cp.stdin.connecting,
+          inputWritable: cp.stdin.writable,
+          inputWritableEnded: cp.stdin.writableEnded,
+          inputWritableLength: cp.stdin.writableLength,
+          inputWritableFinished: cp.stdin.writableFinished,
+          outputReadableEnded: cp.stdout.readableEnded,
+          outputReadableLength: cp.stdout.readableLength,
+          outputReadableFlowing: cp.stdout.readableFlowing,
+          outputReadableisPaused: cp.stdout.isPaused()
+        }
+      : ''
+    )
   }
 }
 
