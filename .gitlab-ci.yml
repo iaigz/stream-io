@@ -48,11 +48,11 @@ test_package:
   stage: test
   script:
     - npm ci
-    - mkdir reports/
-    - npm --silent test >test-report.out 2>test-report.err
+    - mkdir report/
+    - npm test 1>report/test.out 2>report/test.err
   artifacts:
     paths:
-      - reports/
+      - report/
 
 # Publish the package. If the version in package.json has not yet been published, it will be
 # published to GitLab's NPM registry. If the version already exists, the publish command
