@@ -44,7 +44,7 @@ const infoTester = (test) => function (info) {
 // If IO errputs verbose messages, it probably will timeout
 
 test
-  .begin()
+  .begin({ timeout: 6000 })
   .then(test => {
     const stream = new IO('cat', [], { debug: false })
     return test
