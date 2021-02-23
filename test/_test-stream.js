@@ -1,4 +1,4 @@
-const { finished, Transform } = require('stream')
+const { finished, Transform, PassThrough } = require('stream')
 
 /*
  * present module exports an interface which extends functionality of $parent
@@ -20,9 +20,14 @@ const test = module.exports = Object.create(parent)
  *
  *   <number|boolean> #slow: instructs to emulate an slow consumer (ms)
  *
- *   <bool> #through: asserts data flow as-is through stream
+ *   <bool> #failure [false]: asserts at least one error event is emitted
+ *   <bool> #through [false]: asserts data flow as-is through stream
+ *   <bool> #finish [true]: asserts stream emits "finish" event
+ *   <bool> #end [true]: asserts stream emits "end" event
  *
- *   <Array> #emits: event names to capture emision on subject stream
+ *   <Array> #emits [[]]: event names to capture emision on subject stream
+ *   <bool> #buffer [false]: whenever to buffer data chunks as a string
+ *
  * @returns <Promise>: fulfills specified stream
  */
 test.duplex = function (stream, opts = {}) {
@@ -30,18 +35,25 @@ test.duplex = function (stream, opts = {}) {
     // options for data sequence generation
     seq: ['data ', 'flows ', 'down the pipe\n'],
     sync: false,
+    nextTick: true, // use process.nextTick instead of setImmediate
     step: true,
     overflow: false, // TODO
     // options for data consumer
     slow: 0,
+    // information capture
+    emits: [],
+    buffer: false,
     // assertion enable/disable flags
     through: false,
-
-    ...opts,
-
-    // information capture
-    emits: ['error', 'finish', 'end'].concat(opts.emits || [])
+    failure: false,
+    finish: true,
+    end: true,
+    ...opts
   }
+
+  const asyncOperation = (fn, ...args) => opts.nextTick
+    ? process.nextTick(() => fn(...args))
+    : setImmediate(fn, ...args)
 
   if (opts.slow && typeof opts.slow === 'boolean') opts.slow = 100
 
@@ -51,49 +63,63 @@ test.duplex = function (stream, opts = {}) {
     throw new Error('incompatible opts.through/opts.step')
   }
 
-  const alias = this.$.alias = `[object ${stream.constructor.name}]`
-  console.log(`HEAD subject stream ${alias}`)
-  console.log(`DESC ${stream} as subject stream`)
+  const alias = this.$.alias = `${stream}`
+  console.log(`DESC stream as ${alias}`)
 
-  // opts.emits setup
-  console.log('INFO will capture emision of', opts.emits)
-  const emits = opts.emits.reduce((object, event) => {
-    object[event] = false
-    return object
-  }, {})
-  opts.emits.forEach(event => stream.once(event, () => {
+  // opts.emits and error capture setup
+  let emits = { error: false, finish: false, end: false }
+  const errors = []
+  stream.on('error', err => {
+    console.log(`INFO ${alias} emits error "${err.message}"`)
+    emits.error = true
+    errors.push(err)
+  })
+  opts.emits.concat('finish', 'end').forEach(event => stream.once(event, () => {
     console.log(`INFO ${alias} emits "${event}"`)
     emits[event] = true
   }))
+  if (opts.emits.length) {
+    console.log('INFO will capture emision of', opts.emits)
+    emits = opts.emits.reduce((object, event) => {
+      object[event] = false
+      return object
+    }, emits)
+  }
 
+  // $source is a dumb stream used to emulate input via pipe() interface
   // $seq is the sequence of data which will be written to stream during test
   // $idx holds a pointer to current $seq index to be written
   // $next() advances $idx to next value, and writes it to the stream.
+  const source = new PassThrough()
+  console.log(`DESC source as ${source}`)
   const seq = opts.seq.slice(0)
+  console.log(`DESC sequence as Array(${seq.length})`)
   let idx = -1
   let writeOverflows = 0
   const next = () => {
     if (++idx > seq.length) throw new Error('too much next() calls')
     if (idx < seq.length) {
       if (opts.step) console.log('HEAD sequence step %s: %j', idx, seq[idx])
-      if (stream.write(Buffer.from(seq[idx])) === false) {
+      if (source.write(Buffer.from(seq[idx])) === false) {
         console.log(`INFO seq[${idx}] write has overflow ${alias}`)
         writeOverflows++
         return false
       }
       return true
     }
-    console.log(`INFO test data sequence end reached, will end ${alias}`)
-    process.nextTick(() => stream.end())
+    console.log(`INFO sequence end reached, will end ${alias}`)
+    asyncOperation(() => source.end())
     return null
   }
 
   // stream is consumed (and starts flowing) via pipe() to a $consumer stream
   // $dataCount stores how many 'data' events emits the consumer
+  let data = opts.buffer ? '' : null
   let dataCount = 0
   const consumer = new Transform({
     transform (chunk, encoding, callback) {
       ++dataCount
+      if (typeof data === 'string') data += chunk.toString()
 
       // whenever issued to do so, assert data passes through duplex stream
       if (opts.through) {
@@ -122,25 +148,25 @@ test.duplex = function (stream, opts = {}) {
         }
       }
 
-      opts.step && process.nextTick(next)
+      opts.step && asyncOperation(next)
 
-      if (!opts.slow) return callback(null, chunk)
-      setTimeout(() => callback(null, chunk), opts.slow)
+      if (opts.slow) {
+        return setTimeout(() => callback(null, chunk), opts.slow)
+      }
+      asyncOperation(callback, null, chunk)
     }
   })
 
   return new Promise((resolve, reject) => {
-    finished(stream.pipe(consumer), err => {
+    finished(source.pipe(stream).pipe(consumer), err => {
       if (err) {
-        console.error(err)
-        console.log('FAIL stream %s failed', alias)
-        process.exitCode = 1
+        console.log('FAIL consumer stream failed')
         return reject(err)
       }
 
       console.log(`HEAD after ${alias} has finished`)
 
-      // complete PassThrough test when applicable
+      // PassThrough test assertions
       if (opts.through) {
         if (dataCount === seq.length) {
           console.log(`PASS ${alias} emitted ${dataCount} "data" events`)
@@ -151,7 +177,42 @@ test.duplex = function (stream, opts = {}) {
         }
       }
 
-      resolve({ seq, emits, dataCount, writeOverflows })
+      // failure assertions
+      if (opts.failure) {
+        if (emits.error) {
+          console.log(`PASS stream has emitted ${errors.length} error events`)
+        } else {
+          console.error('emits:', emits)
+          console.error('errors:', errors)
+          return reject(new Error('stream should fail (emit "error" event)'))
+        }
+      } else {
+        if (!emits.error) {
+          console.log('PASS stream has not emitted "error" event')
+        } else {
+          console.error('emits:', emits)
+          console.error('errors:', errors)
+          return reject(new Error('stream should not emit "error" event'))
+        }
+      }
+
+      // finish/end emision assertions
+      ;['finish', 'end'].forEach(event => {
+        if (opts[event] && emits[event]) {
+          return console.log(`PASS stream has emitted "${event}"`)
+        }
+        if (opts[event] && !emits[event]) {
+          console.error('emits:', emits)
+          return reject(new Error(`stream should emit "${event}"`))
+        }
+        if (!opts[event] && !emits[event]) {
+          return console.log(`PASS stream has not emitted "${event}"`)
+        }
+        console.error('emits:', emits)
+        reject(new Error(`stream should not emit "${event}"`))
+      })
+
+      resolve({ test, seq, emits, errors, dataCount, writeOverflows, data })
     })
 
     // strategies for writting data to the stream
@@ -162,7 +223,7 @@ test.duplex = function (stream, opts = {}) {
       if (opts.step) return next()
 
       // strategy for opts.step = false
-      console.log('NOTE instructed to write ASAP as much as posible')
+      console.log('WARN instructed to write ASAP as much as posible')
       const writeOp = (more = true) => {
         const begin = idx + 1
         console.log(`HEAD sequence values from ${begin} onwards`)
@@ -175,20 +236,32 @@ test.duplex = function (stream, opts = {}) {
 
         // TODO opts.overflow
         console.log(`INFO ${idx - begin} values pending once ${alias} drains`)
-        stream.once('drain', writeOp)
+        source.once('drain', writeOp)
       }
       writeOp()
     }
 
-    // write the first value from data sequence to the stream
-    // delayed write causes first _read() call to run before first _write()
-    // "sync" write causes first _write() call to run before first _read()
-    if (opts.sync) {
-      console.log('INFO data sequence write will begin synchronously')
-      begin()
+    if (opts.seq.length) {
+      // write the first value from data sequence to the stream
+      // Immediate write causes first _read() call to run before first _write()
+      // "sync" write causes first _write() call to run before first _read()
+      // "opts.nextTick" allows experimenting multiple scenarios
+      if (opts.sync) {
+        console.log('INFO sequence writes will begin synchronously')
+        begin()
+      } else {
+        if (opts.nextTick) {
+          console.log('INFO sequence writes will begin on nextTick')
+          process.nextTick(begin)
+        } else {
+          console.log('INFO sequence writes will begin Immediately')
+          setImmediate(begin)
+        }
+      }
     } else {
-      process.nextTick(begin)
+      console.log('INFO will write no data to stream')
     }
+    console.trace('data sequence beginning')
 
     // consume the stream
     consumer

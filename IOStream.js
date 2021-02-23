@@ -1,161 +1,176 @@
-const assert = require('assert').strict
-
+const { Transform } = require('stream')
 const { spawn } = require('child_process')
 
-const { Duplex } = require('stream')
-
-const IO = Symbol('IOStream')
-const CP = Symbol('ChildProcess')
-
-// IOStream is responsible of ONE (and only one) Input-Output operation.
-class IOStream extends Duplex {
-  constructor (cmd, argv = [], opts = {}) {
-    assert(cmd, 'cmd (argument 1) is mandatory')
-    assert(typeof cmd === 'string', 'cmd (argument 1) must be an string')
-    assert(Array.isArray(argv), 'argv (argument 2) must be an array')
-    assert(typeof opts === 'object', 'options (argument 3) must be an object')
-
-    opts = {
-      // $lazy instructs IO to wait until receiving data to spawn subprocess
-      // set this value to false to spawn subprocess on instance creation
-      lazy: true, // YAGNI, probably
-      // TODO errput: writable destination for child's stderr
-      ...opts
+module.exports = class IOStream extends Transform {
+  constructor (command, cmdArgs = [], options = {}) {
+    if (!command) {
+      throw new TypeError('first argument is mandatory')
+    }
+    if (typeof options !== 'object') {
+      throw new TypeError('Options must be an object')
     }
 
-    super()
+    options = { io: {}, ...options }
 
-    this[IO] = opts
+    // throw new TypeError('First argument must be a string')
+    if (!Array.isArray(cmdArgs)) {
+      throw new TypeError('Second argument must be an Array')
+    }
 
-    Object.defineProperties(this[IO], {
-      cmd: { value: cmd, enumerable: true, writable: false },
-      argv: { value: argv, enumerable: true, writable: false }
+    super(options)
+
+    this._io = {
+      cp: null,
+      command,
+      cmdArgs,
+      opts: {
+        debug: false, // debugging output
+        // success: 0, // TODO expected exit status code
+        stderr: true, // whenever to throw if receives stderr data
+        EOL: '\n', // End-Of-Line terminator for stderr message handling
+        BOL: '\r', // Beggining-Of-Line terminator for stderr message handling
+        ...options.io
+      }
+    }
+
+    // const { command, args } = this._io
+    const cp = this._io.cp = spawn(command, cmdArgs)
+      .once('error', err => this.destroy(err))
+      .once('exit', (code, signal) => {
+        this._debug(`exit ${code}`)
+
+        // exit with status code 0 is the expected result
+        if (code === 0) return this.push(null)
+
+        // non-zero exit codes mean something unexpected
+        if (std2.length) {
+          console.error(std2.map(msg => `${this} stderr: ${msg}`).join('\n'))
+        }
+        throw new Error(`exit with code ${code} and signal ${signal}`)
+      })
+
+    cp.stdout
+      .on('readable', () => {
+        this._debug('stdout source becomes readable', false)
+        let read = true
+        while (read) {
+          const chunk = cp.stdout.read()
+          this._debug(`read ${chunk ? `${chunk.length} bytes` : chunk}`, false)
+
+          // a null chunk will signal output's source EOF
+          if (!chunk) break
+
+          // continue reading as issued by back-pressure system
+          read = this.push(chunk)
+        }
+      })
+      .on('end', () => {
+        this._debug('stdout source has end', false)
+      })
+
+    const { EOL, BOL } = this._io.opts
+    const std2 = []
+    let stderr = ''
+    cp.stderr
+      .on('readable', () => {
+        while (true) {
+          const chunk = cp.stderr.read()
+          // a null chunk will signal stderr's source EOF
+          if (!chunk) break
+
+          stderr += chunk.toString()
+
+          if (stderr.indexOf(EOL) > -1) {
+            stderr.split(EOL).forEach((msg, idx, messages) => {
+              if (idx === messages.length - 1) {
+                stderr = msg
+                return
+              }
+              if (msg.indexOf(BOL) > -1) {
+                return std2.push(msg.split(BOL).pop().trim())
+              }
+              std2.push(msg)
+            })
+          }
+        }
+      })
+      .on('end', () => {
+        if (!this._io.opts.stderr || stderr === '') return
+        this.destroy(new Error(`${this} stderr: ${stderr}`))
+      })
+
+    cp.stdin
+      .on('finish', () => {
+        this._debug('stdin sink has finish', false)
+      })
+  }
+
+  toString () {
+    return `<IO ${this._io.command}>`
+  }
+
+  _transform (chunk, encoding, callback) {
+    const { cp } = this._io
+    this._debug(`${this} transform ${chunk.length} bytes`, false)
+
+    if (cp.exitCode !== null) {
+      return callback(new Error(`${this} has exit with code ${cp.exitCode}`))
+    }
+
+    try {
+      if (cp.stdin.write(chunk, encoding)) {
+        this._debug('synchronously finish transform')
+        return callback()
+      }
+    } catch (err) {
+      return callback(err)
+    }
+
+    this._debug('stdin sink write returned false, wait until it drains', false)
+    cp.stdin.once('drain', () => {
+      this._debug('stdin sink has drain', false)
+      callback()
     })
 
-    this[CP] = opts.lazy ? null : this.spawn()
+    if (cp.stdout.isPaused()) {
+      this._debug('resumed stdout source', false)
+      cp.stdout.resume()
+    }
   }
 
-  // The spawn logic is decoupled to mantain Separation of Concerts
-  spawn () {
-    console.error('spawn', this[IO])
-    return spawn(this[IO].cmd, this[IO].argv, {
-      stdio: ['pipe', 'pipe', process.stderr]
-    })
-      .on('error', (err) => {
-        console.error('Failed command:', this[IO].cmd)
-        console.error('with argv list:', this[IO].argv)
-        this.emit('error', err)
+  // /*
+  _flush (callback) {
+    const { cp } = this._io
+    this._debug('flushing...', false)
+    cp.stdin.end()
+
+    /*
+      .once('finish', () => {
+        this._debug('all writes to stdin sink have been completed')
       })
-      .on('exit', (code, signal) => {
-        // let's determine if subprocess exit should be handled as error
-        let error = null
-        if (signal !== null) {
-          error = new Error(`Child terminated due to signal ${signal}`)
-        } else if (code > 0) {
-          error = new Error(`Child failed with exit status ${code}`)
-        }
-
-        if (error) {
-          if (signal) {
-            console.error('TIP: use `kill -l %s` to see signal name', signal)
-            console.error('TIP: see also `man 2 kill`')
-          } else {
-            console.error('TIP: use `autotest code %s`', code)
-          }
-          return this.emit('error', error)
-        }
-
-        console.error(`Child has exit gracefully (code ${code})`)
-        console.error('stdout.readableEnded', this[CP].stdout.readableEnded)
-        if (!this[CP].stdout.readableFlowing) {
-          // readableFlowing is null when there is no consumer mechanism
-          console.error('stdout.readableFlowing', this[CP].stdout.readableFlowing)
-          console.error('STDOUT SOURCE IS PAUSED!!')
-          this[CP].stdout.resume()
-        }
-        // console.log(this)
-        // this[CP].stdout.end()
-      })
-      // "close" only emits after stdio streams close
-      .on('close', (code, signal) => { console.error('closed stdio streams') })
-      .on('close', (code, signal) => {
-        // end readable side (output) if it's not already
-        if (!this.readableEnded) this.push(null)
-      })
+    */
+    // callback()
   }
+  // */
 
-  // The writable interface follows received data to Subprocess' stdin
-  _write (chunk, encoding, callback) {
-    // lazily spawn subprocess if need
-    if (this[CP] === null) this[CP] = this.spawn()
+  _debug (message, info = true) {
+    if (!this._io.opts.debug) return
 
-    if (!this[CP].stdin.writable) {
-      return callback(new Error('Child stdin is not writable'))
-    }
-
-    // #write() each received chunk to Child process' stdin
-    // Respect back-presure as instructed by #write()'s return value:
-    // - **false** means: wait "drain" to finish operation
-    // - **non-false** means: finish operation and continue
-    if (this[CP].stdin.write(chunk, encoding) === false) {
-      return this[CP].stdin.once('drain', callback)
-    }
-    return callback()
-  }
-
-  // The writable interface finish implies Subprocess' stdin.end()
-  _final (callback) {
-    // console.error('_final run')
-    this[CP].stdin
-      // .once('finish', () => console.log('Child stdin has finish'))
-      .once('finish', callback)
-      .end()
-  }
-
-  // The readable interface pushes data pulled from Subprocess' stdout
-  _read (size) {
-    // lazily spawn subprocess if need
-    if (this[CP] === null) this[CP] = this.spawn()
-
-    // remember: errors while reading must propagate through #destroy()
-    if (!this[CP].stdout.readable) {
-      return this.destroy(new Error('Child stdout is not readable'))
-    }
-
-    // setup mechanism to consume stdout source when needed
-    if (this[CP].stdout.readableFlowing === null) {
-      console.log('stdout source setup')
-      return this[CP].stdout
-        // REMEMBER: "don't push if you are not asked"
-        // https://nodejs.org/es/docs/guides/backpressuring-in-streams/#rules-to-abide-by-when-implementing-custom-streams
-        // consume data to perform one push
-        .on('data', chunk => {
-          // TODO YAGNI+KISS!! could duplicate output elsewhere like tee
-          // process.stderr.write(`out: ${chunk.toString('utf8')}`)
-
-          // Push each pulled chunk into the internal buffer
-          // Respect back-pressure after pushing data:
-          // If push() returns false, then pause the source
-          if (this.push(chunk) === false) {
-            this[CP].stdout.pause()
-            console.error('overflowed, Child stdout paused')
-          }
-        })
-        .once('end', () => {
-          console.error('Child stdout has end!!')
-          // this.push(null) // Pushing `null` chunk signals EOF
-        })
-    }
-
-    // resume stdout source to switch from paused to flowing
-    if (!this[CP].stdout.readableFlowing) {
-      this[CP].stdout.resume()
-      console.error('Child stdout resumed')
-    }
+    const { cp } = this._io
+    console.error(`${this} ${message}`, info ? {
+      // inputPending: cp.stdin.pending,
+      // inputConnecting: cp.stdin.connecting,
+      inputWritable: cp.stdin.writable,
+      inputWritableEnded: cp.stdin.writableEnded,
+      inputWritableLength: cp.stdin.writableLength,
+      inputWritableFinished: cp.stdin.writableFinished,
+      outputReadableEnded: cp.stdout.readableEnded,
+      outputReadableLength: cp.stdout.readableLength,
+      outputReadableFlowing: cp.stdout.readableFlowing,
+      outputReadableisPaused: cp.stdout.isPaused()
+    } : '')
   }
 }
-
-module.exports = IOStream
 
 /* vim: set expandtab: */
 /* vim: set filetype=javascript ts=2 shiftwidth=2: */

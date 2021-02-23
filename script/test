@@ -8,16 +8,9 @@ node test/exports.js || exit
 node test/cat.js || exit
 node test/cat-better.js || exit
 
+node test/echo.js || exit
+
 node test/overflow-in.js || exit
 node test/overflow-out.js || exit
 
-{
-  echo "TEST standard --fix"
-  standard --fix
-  code=$?
-  (( $code )) \
-    && echo "FAIL standard linter reported errors" \
-    || echo "PASS standard linter did not report errors"
-  echo "CODE $code"
-  exit $code
-}
+#node test/enoent.js || exit

@@ -39,6 +39,12 @@ test
   .then(test => {
     const stream = new IO('cat')
     return test
+      .duplex(stream, { seq, through: true, nextTick: false })
+      .then(infoTester(test))
+  })
+  .then(test => {
+    const stream = new IO('cat')
+    return test
       .duplex(stream, { seq, through: true, sync: true })
       .then(infoTester(test))
   })

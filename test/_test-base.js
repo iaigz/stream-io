@@ -52,7 +52,11 @@ test.end = function (err) {
   clearTimeout(this._to)
   if (err !== null) {
     console.error('error:', err)
-    console.log('FAIL', err.message)
+    if (!(err instanceof Error)) {
+      console.log('FAIL test failure error is not an instance of Error')
+    } else {
+      console.log('FAIL', err.message)
+    }
     console.log('INFO will force process exit')
     process.exit(process.exitCode || 1)
   } else {

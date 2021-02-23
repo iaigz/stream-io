@@ -37,20 +37,45 @@ const infoTester = (test) => function (info) {
   return test
 }
 
-const seqLength = 5000
+const seqLength = 9000
 
 test
-  .begin({ timeout: seqLength * 150 })
+  .begin({ timeout: 6000 })
   .then(test => {
     const stream = new IO('cat')
 
     return test
       .duplex(stream, {
         seq: new Array(seqLength).fill('thing ').map((a, b) => a + b),
-        slow: 200,
+        slow: 100,
+        sync: true,
         step: false, // step sequence will never overflow
-        emits: ['drain'],
-        through: false
+        emits: ['drain']
+      })
+      .then(infoTester(test))
+  })
+  .then(test => {
+    const stream = new IO('cat')
+
+    return test
+      .duplex(stream, {
+        seq: new Array(seqLength).fill('thing ').map((a, b) => a + b),
+        slow: 100,
+        nextTick: false,
+        step: false, // step sequence will never overflow
+        emits: ['drain']
+      })
+      .then(infoTester(test))
+  })
+  .then(test => {
+    const stream = new IO('cat')
+
+    return test
+      .duplex(stream, {
+        seq: new Array(seqLength).fill('thing ').map((a, b) => a + b),
+        slow: 100,
+        step: false, // step sequence will never overflow
+        emits: ['drain']
       })
       .then(infoTester(test))
   })

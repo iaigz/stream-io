@@ -1,0 +1,31 @@
+{
+  "campo": "valor",
+  "un string calquera": "hello world",
+  "un numero enteiro": 0,
+  "un numero decimal": 3.141516,
+  "o string 'null'": "null",
+  "o valor null": null,
+  "un array de números": [1, 2, 3],
+  "otro array": [1, "foo", { "bar": "baz" }, null],
+  "objeto": {
+    "subcampo": "lorem ipsum dolor sit amet",
+    "numero": 0,
+    "array": [1, 2, 3],
+    "otro array": [1, "foo", { "bar": "baz" }, null]
+  },
+  "objeto anidado con un key largo de abondo": {
+    "subcampo": "valor",
+    "numero": 0,
+    "array": [1, 2, 3],
+    "otro array": [1, "foo", { "bar": "baz" }, null],
+    "otro objecto": {
+      "subcampo": "valor",
+      "numero": 0,
+      "array": [1, 2, 3],
+      "otro array": [1, "foo", { "bar": "baz" }, null],
+      "otro objecto mas cunha clave castrapeira": {
+        "otro array": [1, "foo", { "bar": "baz" }, null]
+      }
+    }
+  }
+}

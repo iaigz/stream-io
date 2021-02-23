@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "TEST standard --fix"
+
+standard --fix
+code=$?
+
+(( $code )) \
+  && echo "FAIL standard linter reported errors" \
+  || echo "PASS standard linter did not report errors"
+
+echo "CODE $code"
+exit $code

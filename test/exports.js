@@ -65,18 +65,18 @@ incorrect.forEach((value, idx) => {
 // arguments for successful instance creation
 const correct = [
   // first argument must be string and is mandatory
-  ['string'],
+  ['true'],
 
   // second argument is optional but must be array (any length, may be empty)
-  ['string', undefined],
-  ['string', []],
-  ['string', [1, 2, 3]],
+  ['true', undefined],
+  ['true', []],
+  ['true', [1, 2, 3]],
 
   // third argument is optional but must be object holding { keys: values }
   // anything having an 'object' typeof is honored
-  ['string', [], undefined],
-  ['string', [], null],
-  ['string', [], []]
+  ['true', [], undefined],
+  ['true', [], null],
+  ['true', [], []]
 ]
 
 const fnProperties = [

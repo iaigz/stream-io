@@ -1,44 +1,51 @@
+const assert = require('assert').strict
 const test = require('./_test-stream')
 
 const IO = require('..')
 
-// checks to perform after test.duplex fulfills
-const infoTester = (test) => function (info) {
-  if (!info.emits.error) {
-    console.log('PASS stream has not emitted "error" event')
-  } else {
-    return test.end(new Error('stream should not emit "error" event'))
-  }
-
-  if (info.emits.finish && info.emits.end) {
-    console.log('PASS stream has emitted "finish" and "end" events')
-  } else {
-    return test.end(new Error('stream should emit "finish" and "end"'))
-  }
-
-  return test
+const infoCheck = (text) => function (info) {
+  assert.equal(info.data, `${text}\n`, 'unexpected data output')
+  return info.test
 }
 
 /*
  * this test will pipe default data sequence to echo, which closes stdin quick
- * (in fact, it ignores stdin data)
+ * (in fact, it ignores stdin data) and exits before stdio sockets connect
  *
- * this causes subprocess.stdin to be end when IO receives input data
+ * this ensures subprocess.stdin won't be able to receive IO's input data
+ * writting in in such situation won't be posible, and IO should handle
+ * it accordingly, with a meagninful error (not EPIPE)
  */
 test
   .begin()
   .then(test => {
-    const stream = new IO('echo', ['first echo test case'])
+    const text = 'first failure case (Immediate)'
+    const stream = new IO('echo', [text])
     return test
-      .duplex(stream)
-      .then(infoTester(test))
+      .duplex(stream, {
+        buffer: true, failure: true, nextTick: false, finish: false
+      })
+      .then(infoCheck(text))
   })
+  // The nextTick strategy is not stable (unpredictable)
+  /* .then(test => {
+    const text = 'second failure case (nextTick)'
+    const stream = new IO('echo', [text])
+    return test
+      .duplex(stream, {
+        buffer: true, failure: true, nextTick: true, finish: false
+      })
+      .then(infoCheck(text))
+  }) // */
   .then(test => {
-    const stream = new IO('echo', ['second case (sync: true)'])
+    const text = 'third failure case (sync: true)'
+    const stream = new IO('echo', [text])
     return test
-      .duplex(stream, { sync: true })
-      .then(infoTester(test))
-  })
+      .duplex(stream, {
+        buffer: true, failure: true, sync: true, finish: false
+      })
+      .then(infoCheck(text))
+  }) // */
   .catch(test.catcher)
   .finally(test.teardown)
 

@@ -41,18 +41,26 @@ const infoTester = (test) => function (info) {
   return test
 }
 
+// If IO errputs verbose messages, it probably will timeout
+
 test
   .begin()
   .then(test => {
-    const stream = new IO('cat')
+    const stream = new IO('cat', [], { debug: false })
     return test
       .duplex(stream, { seq, step: false, emits: ['drain'] })
       .then(infoTester(test))
   })
   .then(test => {
-    const stream = new IO('cat')
+    const stream = new IO('cat', [], { debug: false })
     return test
       .duplex(stream, { seq, step: false, emits: ['drain'], sync: true })
+      .then(infoTester(test))
+  })
+  .then(test => {
+    const stream = new IO('cat', [], { debug: false })
+    return test
+      .duplex(stream, { seq, step: false, emits: ['drain'], nextTick: false })
       .then(infoTester(test))
   })
   .catch(test.catcher)
