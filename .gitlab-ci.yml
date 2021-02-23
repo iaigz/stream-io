@@ -1,5 +1,5 @@
 default:
-  image: node:latest
+  image: node:12
 
   # Validate that the repository contains a package.json and extract a few values from it.
   before_script:
